@@ -321,6 +321,7 @@ namespace Files
             IsItemSelected = false;
             FolderSettings.LayoutModeChangeRequested += FolderSettings_LayoutModeChangeRequested;
             ParentShellPageInstance.FilesystemViewModel.IsFolderEmptyTextDisplayed = false;
+            FolderSettings.SetLayoutInformation();
 
             if (!navigationArguments.IsSearchResultPage)
             {
@@ -365,7 +366,7 @@ namespace Files
                 ParentShellPageInstance.InstanceViewModel.IsPageTypeSearchResults = true;
                 if (!navigationArguments.IsLayoutSwitch)
                 {
-                    ParentShellPageInstance.FilesystemViewModel.AddSearchResultsToCollection(navigationArguments.SearchResults, navigationArguments.SearchPathParam);
+                    await ParentShellPageInstance.FilesystemViewModel.AddSearchResultsToCollection(navigationArguments.SearchResults, navigationArguments.SearchPathParam);
                 }
             }
 
@@ -751,12 +752,12 @@ namespace Files
             ParentShellPageInstance.ContentPage.SelectedItemsPropertiesViewModel.CheckFileExtension();
         }
 
-        protected virtual void Page_CharacterReceived(CoreWindow sender, CharacterReceivedEventArgs args)
+        protected virtual async void Page_CharacterReceived(CoreWindow sender, CharacterReceivedEventArgs args)
         {
             if (ParentShellPageInstance.IsCurrentInstance)
             {
                 char letterPressed = Convert.ToChar(args.KeyCode);
-                ParentShellPageInstance.InteractionOperations.PushJumpChar(letterPressed);
+                await ParentShellPageInstance.InteractionOperations.PushJumpChar(letterPressed);
             }
         }
 
