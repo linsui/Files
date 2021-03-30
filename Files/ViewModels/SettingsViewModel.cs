@@ -4,23 +4,23 @@ using Files.DataModels;
 using Files.Enums;
 using Files.Filesystem;
 using Files.Helpers;
-using Files.Views;
 using Microsoft.AppCenter.Analytics;
 using Microsoft.Toolkit.Mvvm.ComponentModel;
 using Microsoft.Toolkit.Mvvm.Input;
-using Microsoft.Toolkit.Uwp.Extensions;
+using Microsoft.Toolkit.Uwp;
 using Microsoft.Toolkit.Uwp.UI;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Windows.ApplicationModel;
+using System.Threading.Tasks;
+using Windows.ApplicationModel.AppService;
+using Windows.Foundation.Collections;
 using Windows.Globalization;
 using Windows.Storage;
 using Windows.System;
 using Windows.UI.Xaml;
-using Windows.UI.Xaml.Media;
 
 namespace Files.ViewModels
 {
@@ -28,23 +28,14 @@ namespace Files.ViewModels
     {
         private readonly ApplicationDataContainer localSettings = ApplicationData.Current.LocalSettings;
 
-        public DrivesManager DrivesManager { get; }
+        public CloudDrivesManager CloudDrivesManager { get; private set; }
 
         public TerminalController TerminalController { get; set; }
 
-        public SettingsViewModel()
+        private async Task<SettingsViewModel> Initialize()
         {
             DetectDateTimeFormat();
-            PinSidebarLocationItems();
-            DetectRecycleBinPreference();
             DetectQuickLook();
-            DrivesManager = new DrivesManager();
-
-            //DetectWSLDistros();
-            TerminalController = new TerminalController();
-
-            // Send analytics to AppCenter
-            TrackAnalytics();
 
             // Load the supported languages
             var supportedLang = ApplicationLanguages.ManifestLanguages;
@@ -53,6 +44,23 @@ namespace Files.ViewModels
             {
                 DefaultLanguages.Add(new DefaultLanguageModel(lang));
             }
+
+            TerminalController = await TerminalController.CreateInstance();
+
+            // Send analytics to AppCenter
+            TrackAnalytics();
+
+            return this;
+        }
+
+        public static Task<SettingsViewModel> CreateInstance()
+        {
+            var settings = new SettingsViewModel();
+            return settings.Initialize();
+        }
+
+        private SettingsViewModel()
+        {
         }
 
         private void TrackAnalytics()
@@ -64,12 +72,16 @@ namespace Files.ViewModels
             Analytics.TrackEvent($"{nameof(ShowConfirmDeleteDialog)} {ShowConfirmDeleteDialog}");
             Analytics.TrackEvent($"{nameof(IsAcrylicDisabled)} {IsAcrylicDisabled}");
             Analytics.TrackEvent($"{nameof(ShowFileOwner)} {ShowFileOwner}");
-            Analytics.TrackEvent($"{nameof(IsHorizontalTabStripEnabled)} {IsHorizontalTabStripEnabled}");
+            Analytics.TrackEvent($"{nameof(IsHorizontalTabStripOn)} {IsHorizontalTabStripOn}");
+            Analytics.TrackEvent($"{nameof(IsVerticalTabFlyoutOn)} {IsVerticalTabFlyoutOn}");
+            Analytics.TrackEvent($"{nameof(IsMultitaskingExperienceAdaptive)} {IsMultitaskingExperienceAdaptive}");
             Analytics.TrackEvent($"{nameof(IsDualPaneEnabled)} {IsDualPaneEnabled}");
             Analytics.TrackEvent($"{nameof(AlwaysOpenDualPaneInNewTab)} {AlwaysOpenDualPaneInNewTab}");
-            Analytics.TrackEvent($"{nameof(IsVerticalTabFlyoutEnabled)} {IsVerticalTabFlyoutEnabled}");
             Analytics.TrackEvent($"{nameof(AreHiddenItemsVisible)} {AreHiddenItemsVisible}");
+            Analytics.TrackEvent($"{nameof(AreLayoutPreferencesPerFolder)} {AreLayoutPreferencesPerFolder}");
             Analytics.TrackEvent($"{nameof(ShowDrivesWidget)} {ShowDrivesWidget}");
+            Analytics.TrackEvent($"{nameof(ShowLibrarySection)} {ShowLibrarySection}");
+            Analytics.TrackEvent($"{nameof(ShowBundlesWidget)} {ShowBundlesWidget}");
             Analytics.TrackEvent($"{nameof(ListAndSortDirectoriesAlongsideFiles)} {ListAndSortDirectoriesAlongsideFiles}");
             Analytics.TrackEvent($"{nameof(AreRightClickContentMenuAnimationsEnabled)} {AreRightClickContentMenuAnimationsEnabled}");
         }
@@ -81,13 +93,52 @@ namespace Files.ViewModels
 
         public static async void ReportIssueOnGitHub()
         {
-            await Launcher.LaunchUriAsync(new Uri(@"https://github.com/files-community/files-uwp/issues/new/choose"));
+            await Launcher.LaunchUriAsync(new Uri(@"https://github.com/files-community/Files/issues/new/choose"));
         }
 
+        /// <summary>
+        /// Gets or sets a value indicating the width of the the sidebar pane when open.
+        /// </summary>
         public GridLength SidebarWidth
         {
-            get => new GridLength(Math.Min(Math.Max(Get(200d), 200d), 500d), GridUnitType.Pixel);
+            get => new GridLength(Math.Min(Math.Max(Get(255d), 255d), 500d), GridUnitType.Pixel);
             set => Set(value.Value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating if the sidebar pane should be open or closed.
+        /// </summary>
+        public bool IsSidebarOpen
+        {
+            get => Get(true);
+            set => Set(value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating the height of the preview pane in a horizontal layout.
+        /// </summary>
+        public GridLength PreviewPaneSizeHorizontal
+        {
+            get => new GridLength(Math.Min(Math.Max(Get(300d), 50d), 600d), GridUnitType.Pixel);
+            set => Set(value.Value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating the width of the preview pane in a vertical layout.
+        /// </summary>
+        public GridLength PreviewPaneSizeVertical
+        {
+            get => new GridLength(Math.Min(Math.Max(Get(250d), 50d), 600d), GridUnitType.Pixel);
+            set => Set(value.Value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating if the preview pane should be open or closed.
+        /// </summary>
+        public bool PreviewPaneEnabled
+        {
+            get => Get(false);
+            set => Set(value);
         }
 
         public async void DetectQuickLook()
@@ -95,99 +146,22 @@ namespace Files.ViewModels
             // Detect QuickLook
             try
             {
-                ApplicationData.Current.LocalSettings.Values["Arguments"] = "StartupTasks";
-                await FullTrustProcessLauncher.LaunchFullTrustProcessForCurrentAppAsync();
+                var connection = await AppServiceConnectionHelper.Instance;
+                if (connection != null)
+                {
+                    var (status, response) = await connection.SendMessageForResponseAsync(new ValueSet()
+                    {
+                        { "Arguments", "DetectQuickLook" }
+                    });
+                    if (status == AppServiceResponseStatus.Success)
+                    {
+                        localSettings.Values["quicklook_enabled"] = response.Get("IsAvailable", false);
+                    }
+                }
             }
             catch (Exception ex)
             {
                 NLog.LogManager.GetCurrentClassLogger().Warn(ex, ex.Message);
-            }
-        }
-
-        private void DetectRecycleBinPreference()
-        {
-            if (localSettings.Values["PinRecycleBin"] == null)
-            {
-                localSettings.Values["PinRecycleBin"] = true;
-            }
-
-            if ((bool)localSettings.Values["PinRecycleBin"] == true)
-            {
-                PinRecycleBinToSideBar = true;
-            }
-            else
-            {
-                PinRecycleBinToSideBar = false;
-            }
-        }
-
-        private void PinSidebarLocationItems()
-        {
-            AddDefaultLocations();
-        }
-
-        private void AddDefaultLocations()
-        {
-            MainPage.SideBarItems.Add(new LocationItem
-            {
-                Text = "SidebarHome".GetLocalized(),
-                Font = App.Current.Resources["FluentUIGlyphs"] as FontFamily,
-                Glyph = "\uea80",
-                IsDefaultLocation = true,
-                Path = "Home"
-            });
-        }
-
-        private async void DetectWSLDistros()
-        {
-            try
-            {
-                var distroFolder = await StorageFolder.GetFolderFromPathAsync(@"\\wsl$\");
-                if ((await distroFolder.GetFoldersAsync()).Count > 0)
-                {
-                    AreLinuxFilesSupported = false;
-                }
-
-                foreach (StorageFolder folder in await distroFolder.GetFoldersAsync())
-                {
-                    Uri logoURI = null;
-                    if (folder.DisplayName.Contains("ubuntu", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logoURI = new Uri("ms-appx:///Assets/WSL/ubuntupng.png");
-                    }
-                    else if (folder.DisplayName.Contains("kali", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logoURI = new Uri("ms-appx:///Assets/WSL/kalipng.png");
-                    }
-                    else if (folder.DisplayName.Contains("debian", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logoURI = new Uri("ms-appx:///Assets/WSL/debianpng.png");
-                    }
-                    else if (folder.DisplayName.Contains("opensuse", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logoURI = new Uri("ms-appx:///Assets/WSL/opensusepng.png");
-                    }
-                    else if (folder.DisplayName.Contains("alpine", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logoURI = new Uri("ms-appx:///Assets/WSL/alpinepng.png");
-                    }
-                    else
-                    {
-                        logoURI = new Uri("ms-appx:///Assets/WSL/genericpng.png");
-                    }
-
-                    MainPage.SideBarItems.Add(new WSLDistroItem()
-                    {
-                        Text = folder.DisplayName,
-                        Path = folder.Path,
-                        Logo = logoURI
-                    });
-                }
-            }
-            catch (Exception)
-            {
-                // WSL Not Supported/Enabled
-                AreLinuxFilesSupported = false;
             }
         }
 
@@ -241,6 +215,15 @@ namespace Files.ViewModels
         }
 
         /// <summary>
+        /// Gets or sets a value indicating whether or not the date created column should be visible.
+        /// </summary>
+        public bool ShowDateCreatedColumn
+        {
+            get => Get(false);
+            set => Set(value);
+        }
+
+        /// <summary>
         /// Gets or sets a value indicating whether or not the type column should be visible.
         /// </summary>
         public bool ShowTypeColumn
@@ -258,7 +241,7 @@ namespace Files.ViewModels
             set => Set(value);
         }
 
-        #endregion
+        #endregion DetailsView Column Settings
 
         #region CommonPaths
 
@@ -305,6 +288,7 @@ namespace Files.ViewModels
 
         // Currently is the command to open the folder from cmd ("cmd /c start Shell:RecycleBinFolder")
         public string RecycleBinPath { get; set; } = @"Shell:RecycleBinFolder";
+        public string NetworkFolderPath { get; set; } = @"Shell:NetworkPlacesFolder";
 
         #endregion CommonPaths
 
@@ -373,6 +357,15 @@ namespace Files.ViewModels
             set => Set(value);
         }
 
+        /// <summary>
+        /// Enables adaptive layout that adjusts layout mode based on the context of the directory
+        /// </summary>
+        public bool AdaptiveLayoutEnabled
+        {
+            get => Get(true);
+            set => Set(value);
+        }
+
         #endregion FilesAndFolder
 
         #region Multitasking
@@ -389,7 +382,7 @@ namespace Files.ViewModels
         /// <summary>
         /// Gets or sets a value indicating whether or not to enable the vertical tab layout.
         /// </summary>
-        public bool IsVerticalTabFlyoutEnabled
+        public bool IsVerticalTabFlyoutOn
         {
             get => Get(false);
             set => Set(value);
@@ -398,7 +391,7 @@ namespace Files.ViewModels
         /// <summary>
         /// Gets or sets a value indicating whether or not to enable the horizontal tab layout.
         /// </summary>
-        public bool IsHorizontalTabStripEnabled
+        public bool IsHorizontalTabStripOn
         {
             get => Get(false);
             set => Set(value);
@@ -453,6 +446,15 @@ namespace Files.ViewModels
             set => Set(value);
         }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether or not the Bundles widget should be visible.
+        /// </summary>
+        public bool ShowBundlesWidget
+        {
+            get => Get(false);
+            set => Set(value);
+        }
+
         #endregion Widgets
 
         #region Preferences
@@ -467,14 +469,23 @@ namespace Files.ViewModels
         }
 
         /// <summary>
+        /// Gets or sets a value indicating whether or not to show the library section on the sidebar.
+        /// </summary>
+        public bool ShowLibrarySection
+        {
+            get => Get(false);
+            set => Set(value);
+        }
+
+        /// <summary>
         /// Gets or sets a value indicating the application language.
         /// </summary>
         public DefaultLanguageModel CurrentLanguage { get; set; } = new DefaultLanguageModel(ApplicationLanguages.PrimaryLanguageOverride);
 
         /// <summary>
-        /// Gets or sets an ObservableCollection of the support langauges.
+        /// Gets or sets an ObservableCollection of the support languages.
         /// </summary>
-        public ObservableCollection<DefaultLanguageModel> DefaultLanguages { get; }
+        public ObservableCollection<DefaultLanguageModel> DefaultLanguages { get; private set; }
 
         /// <summary>
         /// Gets or sets a value indicating the default language.
@@ -496,42 +507,14 @@ namespace Files.ViewModels
         /// <summary>
         /// Gets or sets a value indicating whether or not recycle bin should be pinned to the sidebar.
         /// </summary>
-        private bool pinRecycleBinToSideBar;
-
         public bool PinRecycleBinToSideBar
         {
-            get => pinRecycleBinToSideBar;
+            get => Get(true);
             set
             {
-                if (value != pinRecycleBinToSideBar)
+                if (Set(value))
                 {
-                    SetProperty(ref pinRecycleBinToSideBar, value);
-                    if (value == true)
-                    {
-                        localSettings.Values["PinRecycleBin"] = true;
-                        var recycleBinItem = new LocationItem
-                        {
-                            Text = localSettings.Values.Get("RecycleBin_Title", "Recycle Bin"),
-                            Font = Application.Current.Resources["RecycleBinIcons"] as FontFamily,
-                            Glyph = "\uEF87",
-                            IsDefaultLocation = true,
-                            Path = RecycleBinPath
-                        };
-                        // Add recycle bin to sidebar, title is read from LocalSettings (provided by the fulltrust process)
-                        // TODO: the very first time the app is launched localized name not available
-                        MainPage.SideBarItems.Insert(MainPage.SideBarItems.Where(item => item is LocationItem).Count(), recycleBinItem);
-                    }
-                    else
-                    {
-                        localSettings.Values["PinRecycleBin"] = false;
-                        foreach (INavigationControlItem item in MainPage.SideBarItems.ToList())
-                        {
-                            if (item is LocationItem && item.Path == RecycleBinPath)
-                            {
-                                MainPage.SideBarItems.Remove(item);
-                            }
-                        }
-                    }
+                    _ = App.SidebarPinnedController.Model.ShowHideRecycleBinItemAsync(value);
                 }
             }
         }
@@ -545,7 +528,7 @@ namespace Files.ViewModels
         /// </summary>
         public bool IsAcrylicDisabled
         {
-            get => Get(true);
+            get => Get(false);
             set => Set(value);
         }
 
@@ -568,23 +551,13 @@ namespace Files.ViewModels
         }
 
         /// <summary>
-        /// Gets or sets a value indicating whether or not the copy location menu item is shown in the right click context menu.
+        /// The relative path (from the Themes folder) to an xaml file containing a resource dictionary to be loaded at startup.
         /// </summary>
-        public bool ShowCopyLocationMenuItem
+        public string PathToThemeFile
         {
-            get => Get(true);
+            get => Get("DefaultScheme".GetLocalized());
             set => Set(value);
         }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether or not the open in new tab menu item is shown in the right click context menu.
-        /// </summary>
-        public bool ShowOpenInNewTabMenuItem
-        {
-            get => Get(true);
-            set => Set(value);
-        }
-
         #endregion Appearance
 
         #region Experimental
@@ -604,6 +577,33 @@ namespace Files.ViewModels
         public bool UseFileListCache
         {
             get => Get(true);
+            set => Set(value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether or not to use preemptive caching.
+        /// </summary>
+        public bool UsePreemptiveCache
+        {
+            get => Get(false);
+            set => Set(value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating the limit of parallel preemptive cache loading limit.
+        /// </summary>
+        public int PreemptiveCacheParallelLimit
+        {
+            get => Get(2);
+            set => Set(value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether or not to enable the multiselect option.
+        /// </summary>
+        public bool ShowMultiselectOption
+        {
+            get => Get(false);
             set => Set(value);
         }
 
@@ -671,15 +671,6 @@ namespace Files.ViewModels
         #endregion Startup
 
         /// <summary>
-        /// Gets or sets a value indicating whether or not WSL is supported.
-        /// </summary>
-        public bool AreLinuxFilesSupported
-        {
-            get => Get(false);
-            set => Set(value);
-        }
-
-        /// <summary>
         /// Gets or sets a value indicating whether or not to show a teaching tip informing the user about the status center.
         /// </summary>
         public bool ShowStatusCenterTeachingTip
@@ -697,6 +688,15 @@ namespace Files.ViewModels
             set => Set(value);
         }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether or not to show the confirm elevation dialog.
+        /// </summary>
+        public bool HideConfirmElevateDialog
+        {
+            get => Get(false);
+            set => Set(value);
+        }
+
         public event EventHandler ThemeModeChanged;
 
         public RelayCommand UpdateThemeElements => new RelayCommand(() =>
@@ -704,7 +704,7 @@ namespace Files.ViewModels
             ThemeModeChanged?.Invoke(this, EventArgs.Empty);
         });
 
-        public AcrylicTheme AcrylicTheme { get; set; }
+        public AcrylicTheme AcrylicTheme { get; set; } = new AcrylicTheme();
 
         public FolderLayoutModes DefaultLayoutMode
         {
@@ -810,10 +810,5 @@ namespace Files.ViewModels
         private delegate bool TryParseDelegate<TValue>(string inValue, out TValue parsedValue);
 
         #endregion ReadAndSaveSettings
-
-        public void Dispose()
-        {
-            DrivesManager?.Dispose();
-        }
     }
 }

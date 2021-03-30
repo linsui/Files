@@ -1,5 +1,5 @@
 ﻿using Files.ViewModels;
-using Microsoft.Toolkit.Uwp.Extensions;
+using Microsoft.Toolkit.Uwp;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -25,37 +25,37 @@ namespace Files.UserControls.Widgets
             itemsAdded.Clear();
             itemsAdded.Add(new FavoriteLocationItem()
             {
-                Icon = "\xe9f1",
+                Icon = "\xE8FC",
                 Text = "SidebarDesktop".GetLocalized(),
                 Tag = "Desktop"
             });
             itemsAdded.Add(new FavoriteLocationItem()
             {
-                Icon = "\xe91c",
+                Icon = "\xE896",
                 Text = "SidebarDownloads".GetLocalized(),
                 Tag = "Downloads"
             });
             itemsAdded.Add(new FavoriteLocationItem()
             {
-                Icon = "\xea11",
+                Icon = "\xE8A5",
                 Text = "SidebarDocuments".GetLocalized(),
                 Tag = "Documents"
             });
             itemsAdded.Add(new FavoriteLocationItem()
             {
-                Icon = "\xea83",
+                Icon = "\xEB9F",
                 Text = "SidebarPictures".GetLocalized(),
                 Tag = "Pictures"
             });
             itemsAdded.Add(new FavoriteLocationItem()
             {
-                Icon = "\xead4",
+                Icon = "\xEC4F",
                 Text = "SidebarMusic".GetLocalized(),
                 Tag = "Music"
             });
             itemsAdded.Add(new FavoriteLocationItem()
             {
-                Icon = "\xec0d",
+                Icon = "\xE8B2",
                 Text = "SidebarVideos".GetLocalized(),
                 Tag = "Videos"
             });
@@ -71,7 +71,7 @@ namespace Files.UserControls.Widgets
             // Search for "Scale Element".
             var element = sender as UIElement;
             var visual = ElementCompositionPreview.GetElementVisual(element);
-            visual.Scale = new Vector3(1.03f, 1.03f, 1);
+            visual.Scale = new Vector3(1.02f, 1.02f, 1);
         }
 
         private void GridScaleNormal(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
@@ -95,7 +95,7 @@ namespace Files.UserControls.Widgets
                 case "Downloads":
                     NavigationPath = AppSettings.DownloadsPath;
                     break;
-                
+
                 case "Documents":
                     NavigationPath = AppSettings.DocumentsPath;
                     break;

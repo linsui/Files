@@ -3,8 +3,14 @@
     public interface INavigationControlItem
     {
         public string Glyph { get; }
+
         public string Text { get; }
+
         public string Path { get; }
+        public SectionType Section { get; }
+
+        public string HoverDisplayText { get; }
+
         public NavigationControlItemType ItemType { get; }
     }
 
@@ -14,6 +20,17 @@
         Drive,
         LinuxDistro,
         Location,
-        OneDrive
+        CloudDrive
+    }
+
+    public enum SectionType
+    {
+        Home,
+        Favorites,
+        Library,
+        Drives,
+        CloudDrives,
+        Network,
+        WSL
     }
 }

@@ -3,9 +3,11 @@ using Files.Filesystem;
 using Files.Helpers;
 using Files.UserControls.Widgets;
 using Files.ViewModels;
-using Microsoft.Toolkit.Uwp.Extensions;
+using Files.ViewModels.Bundles;
+using Microsoft.Toolkit.Uwp;
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel.AppService;
 using Windows.UI.Xaml.Controls;
@@ -13,12 +15,12 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Files.Views
 {
-    public sealed partial class YourHome : Page
+    public sealed partial class YourHome : Page, IDisposable
     {
         private IShellPage AppInstance = null;
         public SettingsViewModel AppSettings => App.AppSettings;
         public FolderSettingsViewModel FolderSettings => AppInstance?.InstanceViewModel.FolderSettings;
-        public AppServiceConnection Connection => AppInstance?.ServiceConnection;
+        public NamedPipeAsAppServiceConnection Connection => AppInstance?.ServiceConnection;
 
         public YourHome()
         {
@@ -47,6 +49,11 @@ namespace Files.Views
                 RecentFilesWidget.RecentFilesOpenLocationInvoked += RecentFilesWidget_RecentFilesOpenLocationInvoked;
                 RecentFilesWidget.RecentFileInvoked += RecentFilesWidget_RecentFileInvoked;
             }
+            if (BundlesWidget != null)
+            {
+                (BundlesWidget?.DataContext as BundlesViewModel)?.Initialize(AppInstance);
+                (BundlesWidget?.DataContext as BundlesViewModel)?.Load();
+            }
         }
 
         private async void RecentFilesWidget_RecentFileInvoked(object sender, UserControls.PathNavigationEventArgs e)
@@ -54,32 +61,30 @@ namespace Files.Views
             try
             {
                 var directoryName = Path.GetDirectoryName(e.ItemPath);
-                await AppInstance.InteractionOperations.InvokeWin32ComponentAsync(e.ItemPath, workingDir: directoryName);
+                await Win32Helpers.InvokeWin32ComponentAsync(e.ItemPath, AppInstance, workingDirectory: directoryName);
             }
             catch (UnauthorizedAccessException)
             {
-                var consentDialog = new ConsentDialog();
-                await consentDialog.ShowAsync();
+                DynamicDialog dialog = DynamicDialogFactory.GetFor_ConsentDialog();
+                await dialog.ShowAsync();
             }
             catch (ArgumentException)
             {
                 if (new DirectoryInfo(e.ItemPath).Root.ToString().Contains(@"C:\"))
                 {
-                    AppInstance.ContentFrame.Navigate(FolderSettings.GetLayoutType(e.ItemPath), new NavigationArguments()
+                    AppInstance.NavigateWithArguments(FolderSettings.GetLayoutType(e.ItemPath), new NavigationArguments()
                     {
-                        AssociatedTabInstance = AppInstance,
                         NavPathParam = e.ItemPath
                     });
                 }
                 else
                 {
-                    foreach (DriveItem drive in AppSettings.DrivesManager.Drives)
+                    foreach (DriveItem drive in Enumerable.Concat(App.DrivesManager.Drives, AppSettings.CloudDrivesManager.Drives))
                     {
                         if (drive.Path.ToString() == new DirectoryInfo(e.ItemPath).Root.ToString())
                         {
-                            AppInstance.ContentFrame.Navigate(FolderSettings.GetLayoutType(e.ItemPath), new NavigationArguments()
+                            AppInstance.NavigateWithArguments(FolderSettings.GetLayoutType(e.ItemPath), new NavigationArguments()
                             {
-                                AssociatedTabInstance = AppInstance,
                                 NavPathParam = e.ItemPath
                             });
                             return;
@@ -97,19 +102,17 @@ namespace Files.Views
 
         private void RecentFilesWidget_RecentFilesOpenLocationInvoked(object sender, UserControls.PathNavigationEventArgs e)
         {
-            AppInstance.ContentFrame.Navigate(FolderSettings.GetLayoutType(e.ItemPath), new NavigationArguments()
+            AppInstance.NavigateWithArguments(FolderSettings.GetLayoutType(e.ItemPath), new NavigationArguments()
             {
-                NavPathParam = e.ItemPath,
-                AssociatedTabInstance = AppInstance
+                NavPathParam = e.ItemPath
             });
         }
 
         private void LibraryLocationCardsWidget_LibraryCardInvoked(object sender, LibraryCardInvokedEventArgs e)
         {
-            AppInstance.ContentFrame.Navigate(FolderSettings.GetLayoutType(e.Path), new NavigationArguments()
+            AppInstance.NavigateWithArguments(FolderSettings.GetLayoutType(e.Path), new NavigationArguments()
             {
-                NavPathParam = e.Path,
-                AssociatedTabInstance = AppInstance
+                NavPathParam = e.Path
             });
             AppInstance.InstanceViewModel.IsPageTypeNotHome = true;     // show controls that were hidden on the home page
         }
@@ -121,10 +124,9 @@ namespace Files.Views
 
         private void DrivesWidget_DrivesWidgetInvoked(object sender, DrivesWidget.DrivesWidgetInvokedEventArgs e)
         {
-            AppInstance.ContentFrame.Navigate(FolderSettings.GetLayoutType(e.Path), new NavigationArguments()
+            AppInstance.NavigateWithArguments(FolderSettings.GetLayoutType(e.Path), new NavigationArguments()
             {
-                NavPathParam = e.Path,
-                AssociatedTabInstance = AppInstance
+                NavPathParam = e.Path
             });
             AppInstance.InstanceViewModel.IsPageTypeNotHome = true;     // show controls that were hidden on the home page
         }
@@ -140,8 +142,8 @@ namespace Files.Views
             AppInstance.InstanceViewModel.IsPageTypeRecycleBin = false;
             AppInstance.InstanceViewModel.IsPageTypeCloudDrive = false;
             AppInstance.NavigationToolbar.CanRefresh = false;
-            AppInstance.NavigationToolbar.CanGoBack = AppInstance.ContentFrame.CanGoBack;
-            AppInstance.NavigationToolbar.CanGoForward = AppInstance.ContentFrame.CanGoForward;
+            AppInstance.NavigationToolbar.CanGoBack = AppInstance.CanNavigateBackward;
+            AppInstance.NavigationToolbar.CanGoForward = AppInstance.CanNavigateForward;
             AppInstance.NavigationToolbar.CanNavigateToParent = false;
 
             // Set path of working directory empty
@@ -158,5 +160,16 @@ namespace Files.Views
             };
             AppInstance.NavigationToolbar.PathComponents.Add(item);
         }
+
+        #region IDisposable
+
+        // TODO: This Dispose() is never called, please implement the functionality to call this function.
+        //       This IDisposable.Dispose() needs to be called to unhook events in BundlesWidget to avoid memory leaks.
+        public void Dispose()
+        {
+            BundlesWidget?.Dispose();
+        }
+
+        #endregion IDisposable
     }
 }

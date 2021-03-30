@@ -1,5 +1,7 @@
 using Files.Filesystem;
+using Files.Helpers;
 using Files.ViewModels.Properties;
+using Microsoft.Toolkit.Uwp;
 using Microsoft.Toolkit.Uwp.Helpers;
 using System;
 using System.Threading.Tasks;
@@ -25,16 +27,16 @@ namespace Files.Views
                 {
                     if (AppInstance.FilesystemViewModel != null)
                     {
-                        await AppInstance.FilesystemViewModel.Connection.SendMessageAsync(new ValueSet()
+                        await AppInstance.ServiceConnection?.SendMessageAsync(new ValueSet()
                         {
                             { "Arguments", "SetVolumeLabel" },
                             { "drivename", drive.Path },
                             { "newlabel", ViewModel.ItemName }
                         });
-                        _ = CoreApplication.MainView.ExecuteOnUIThreadAsync(async () =>
+                        _ = CoreApplication.MainView.DispatcherQueue.EnqueueAsync(async () =>
                         {
                             await drive.UpdateLabelAsync();
-                            await AppInstance.FilesystemViewModel.SetWorkingDirectoryAsync(drive.Path);
+                            await AppInstance.FilesystemViewModel?.SetWorkingDirectoryAsync(drive.Path);
                         });
                     }
                 }
@@ -43,9 +45,26 @@ namespace Files.Views
             {
                 if (!string.IsNullOrWhiteSpace(ViewModel.ItemName) && ViewModel.OriginalItemName != ViewModel.ItemName)
                 {
-                    await CoreApplication.MainView.ExecuteOnUIThreadAsync(() => AppInstance.InteractionOperations.RenameFileItemAsync(item,
+                    await CoreApplication.MainView.DispatcherQueue.EnqueueAsync(() => UIFilesystemHelpers.RenameFileItemAsync(item,
                           ViewModel.OriginalItemName,
-                          ViewModel.ItemName));
+                          ViewModel.ItemName,
+                          AppInstance));
+                }
+
+                // Handle the hidden attribute
+                if (BaseProperties is CombinedProperties)
+                {
+                    // Handle each file independently
+                    var items = (BaseProperties as CombinedProperties).List;
+                    foreach (var fileOrFolder in items)
+                    {
+                        await CoreApplication.MainView.DispatcherQueue.EnqueueAsync(() => UIFilesystemHelpers.SetHiddenAttributeItem(fileOrFolder, ViewModel.IsHidden, AppInstance.SlimContentPage));
+                    }
+                }
+                else
+                {
+                    // Handle the visibility attribute for a single file
+                    await CoreApplication.MainView.DispatcherQueue.EnqueueAsync(() => UIFilesystemHelpers.SetHiddenAttributeItem(item, ViewModel.IsHidden, AppInstance.SlimContentPage));
                 }
             }
         }

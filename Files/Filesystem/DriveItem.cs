@@ -2,7 +2,7 @@
 using Files.Common;
 using Files.Extensions;
 using Microsoft.Toolkit.Mvvm.ComponentModel;
-using Microsoft.Toolkit.Uwp.Extensions;
+using Microsoft.Toolkit.Uwp;
 using Microsoft.Toolkit.Uwp.Helpers;
 using System;
 using System.Threading.Tasks;
@@ -15,12 +15,27 @@ namespace Files.Filesystem
     public class DriveItem : ObservableObject, INavigationControlItem
     {
         public string Glyph { get; set; }
-        public string Path { get; set; }
+
+        private string path;
+
+        public string Path
+        {
+            get => path;
+            set
+            {
+                path = value;
+                HoverDisplayText = Path.Contains("?") ? Text : Path;
+            }
+        }
+
+        public string HoverDisplayText { get; private set; }
         public string DeviceID { get; set; }
         public StorageFolder Root { get; set; }
         public NavigationControlItemType ItemType { get; set; } = NavigationControlItemType.Drive;
         public Visibility ItemVisibility { get; set; } = Visibility.Visible;
-        public bool IsRemovable { get; set; }
+
+        public bool IsRemovable => Type == DriveType.Removable || Type == DriveType.CDRom;
+        public bool IsNetwork => Type == DriveType.Network;
 
         private ByteSize maxSpace;
         private ByteSize freeSpace;
@@ -77,9 +92,11 @@ namespace Files.Filesystem
             set => SetProperty(ref spaceText, value);
         }
 
+        public SectionType Section { get; set; }
+
         public DriveItem()
         {
-            ItemType = NavigationControlItemType.OneDrive;
+            ItemType = NavigationControlItemType.CloudDrive;
         }
 
         public DriveItem(StorageFolder root, string deviceId, DriveType type)
@@ -89,7 +106,6 @@ namespace Files.Filesystem
             Path = string.IsNullOrEmpty(root.Path) ? $"\\\\?\\{root.Name}\\" : root.Path;
             DeviceID = deviceId;
             Root = root;
-            IsRemovable = (Type == DriveType.Removable || Type == DriveType.CDRom);
 
             CoreApplication.MainView.ExecuteOnUIThreadAsync(() => UpdatePropertiesAsync());
         }
@@ -138,36 +154,42 @@ namespace Files.Filesystem
             switch (type)
             {
                 case DriveType.Fixed:
-                    Glyph = "\ueb8b";
+                    Glyph = "\xEDA2";
                     break;
 
                 case DriveType.Removable:
-                    Glyph = "\uec0a";
+                    Glyph = "\xE88E";
                     break;
 
                 case DriveType.Network:
-                    Glyph = "\ueac2";
+                    Glyph = "\xE8CE";
                     break;
 
                 case DriveType.Ram:
+                    Glyph = "\xE950";
                     break;
 
                 case DriveType.CDRom:
-                    Glyph = "\uec39";
+                    Glyph = "\uE958";
                     break;
 
                 case DriveType.Unknown:
                     break;
 
                 case DriveType.NoRootDirectory:
+                    Glyph = "\xED25";
                     break;
 
                 case DriveType.VirtualDrive:
-                    Glyph = "\ue9b7";
+                    Glyph = "\uE753";
+                    break;
+
+                case DriveType.CloudDrive:
+                    Glyph = "\uE753";
                     break;
 
                 case DriveType.FloppyDisk:
-                    Glyph = "\ueb4a";
+                    Glyph = "\xE74E";
                     break;
 
                 default:
@@ -186,6 +208,7 @@ namespace Files.Filesystem
         FloppyDisk,
         Unknown,
         NoRootDirectory,
-        VirtualDrive
+        VirtualDrive,
+        CloudDrive,
     }
 }

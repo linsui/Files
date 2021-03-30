@@ -3,21 +3,22 @@ using Files.Controllers;
 using Files.Filesystem;
 using Files.Filesystem.FilesystemHistory;
 using Files.Helpers;
+using Files.SettingsInterfaces;
 using Files.UserControls.MultitaskingControl;
 using Files.ViewModels;
 using Files.Views;
 using Microsoft.AppCenter;
 using Microsoft.AppCenter.Analytics;
 using Microsoft.AppCenter.Crashes;
-using Microsoft.Toolkit.Uwp.Extensions;
+using Microsoft.Toolkit.Uwp;
 using Microsoft.Toolkit.Uwp.Helpers;
 using Microsoft.Toolkit.Uwp.Notifications;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NLog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,12 +44,28 @@ namespace Files
 
         public static SemaphoreSlim SemaphoreSlim = new SemaphoreSlim(1, 1);
         public static StorageHistoryWrapper HistoryWrapper = new StorageHistoryWrapper();
-
-        public static SettingsViewModel AppSettings { get; set; }
-        public static InteractionViewModel InteractionViewModel { get; set; }
+        public static IBundlesSettings BundlesSettings = new BundlesSettingsViewModel();
+        public static SettingsViewModel AppSettings { get; private set; }
+        public static InteractionViewModel InteractionViewModel { get; private set; }
         public static JumpListManager JumpList { get; } = new JumpListManager();
-        public static SidebarPinnedController SidebarPinnedController { get; set; }
+        public static SidebarPinnedController SidebarPinnedController { get; private set; }
+        public static CloudDrivesManager CloudDrivesManager { get; private set; }
+        public static NetworkDrivesManager NetworkDrivesManager { get; private set; }
+        public static DrivesManager DrivesManager { get; private set; }
+        public static WSLDistroManager WSLDistroManager { get; private set; }
+        public static LibraryManager LibraryManager { get; private set; }
+        public static ExternalResourcesHelper ExternalResourcesHelper { get; private set; }
+
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public static SecondaryTileHelper SecondaryTileHelper { get; private set; } = new SecondaryTileHelper();
+
+        public static class AppData
+        {
+            // Get the extensions that are available for this host.
+            // Extensions that declare the same contract string as the host will be recognized.
+            internal static ExtensionManager FilePreviewExtensionManager { get; set; } = new ExtensionManager("com.files.filepreview");
+        }
 
         public App()
         {
@@ -62,8 +79,42 @@ namespace Files
             // Initialize NLog
             StorageFolder storageFolder = ApplicationData.Current.LocalFolder;
             LogManager.Configuration.Variables["LogPath"] = storageFolder.Path;
+            AppData.FilePreviewExtensionManager.Initialize(); // The extension manager can update UI, so pass it the UI dispatcher to use for UI updates
 
             StartAppCenter();
+        }
+
+        private static async Task EnsureSettingsAndConfigurationAreBootstrapped()
+        {
+            if (AppSettings == null)
+            {
+                AppSettings = await SettingsViewModel.CreateInstance();
+            }
+
+            ExternalResourcesHelper ??= new ExternalResourcesHelper();
+            await ExternalResourcesHelper.LoadSelectedTheme();
+
+            InteractionViewModel ??= new InteractionViewModel();
+            SidebarPinnedController ??= await SidebarPinnedController.CreateInstance();
+            LibraryManager ??= new LibraryManager();
+            DrivesManager ??= new DrivesManager();
+            NetworkDrivesManager ??= new NetworkDrivesManager();
+            CloudDrivesManager ??= new CloudDrivesManager();
+            WSLDistroManager ??= new WSLDistroManager();
+
+            // Start off a list of tasks we need to run before we can continue startup
+            _ = Task.Factory.StartNew(async () =>
+            {
+                if (App.AppSettings.ShowLibrarySection)
+                {
+                    await LibraryManager.EnumerateDrivesAsync();
+                }
+
+                await DrivesManager.EnumerateDrivesAsync();
+                await CloudDrivesManager.EnumerateDrivesAsync();
+                await NetworkDrivesManager.EnumerateDrivesAsync();
+                await WSLDistroManager.EnumerateDrivesAsync();
+            });
         }
 
         private async void StartAppCenter()
@@ -85,21 +136,7 @@ namespace Files
 
         private void OnLeavingBackground(object sender, LeavingBackgroundEventArgs e)
         {
-            AppSettings?.DrivesManager?.ResumeDeviceWatcher();
-        }
-
-        public static INavigationControlItem RightClickedItem;
-
-        public static void UnpinItem_Click(object sender, RoutedEventArgs e)
-        {
-            if (RightClickedItem.Path.Equals(AppSettings.RecycleBinPath, StringComparison.OrdinalIgnoreCase))
-            {
-                AppSettings.PinRecycleBinToSideBar = false;
-            }
-            else
-            {
-                SidebarPinnedController.Model.RemoveItem(RightClickedItem.Path.ToString());
-            }
+            DrivesManager?.ResumeDeviceWatcher();
         }
 
         public static Windows.UI.Xaml.UnhandledExceptionEventArgs ExceptionInfo { get; set; }
@@ -114,11 +151,13 @@ namespace Files
         protected override async void OnLaunched(LaunchActivatedEventArgs e)
         {
             //start tracking app usage
-            SystemInformation.TrackAppUse(e);
+            SystemInformation.Instance.TrackAppUse(e);
 
             Logger.Info("App launched");
 
             bool canEnablePrelaunch = ApiInformation.IsMethodPresent("Windows.ApplicationModel.Core.CoreApplication", "EnablePrelaunch");
+
+            await EnsureSettingsAndConfigurationAreBootstrapped();
 
             // Do not repeat app initialization when the Window already has content,
             // just ensure that the window is active
@@ -154,7 +193,10 @@ namespace Files
                 }
                 else
                 {
-                    await MainPage.AddNewTabByPathAsync(typeof(PaneHolderPage), e.Arguments);
+                    if (!(string.IsNullOrEmpty(e.Arguments) && MainPageViewModel.AppInstances.Count > 0))
+                    {
+                        await MainPageViewModel.AddNewTabByPathAsync(typeof(PaneHolderPage), e.Arguments);
+                    }
                 }
 
                 // Ensure the current window is active
@@ -186,7 +228,7 @@ namespace Files
                 // Clipboard.GetContent() will throw UnauthorizedAccessException
                 // if the app window is not in the foreground and active
                 DataPackageView packageView = Clipboard.GetContent();
-                if (packageView.Contains(StandardDataFormats.StorageItems))
+                if (packageView.Contains(StandardDataFormats.StorageItems) || packageView.Contains(StandardDataFormats.Bitmap))
                 {
                     App.InteractionViewModel.IsPasteEnabled = true;
                 }
@@ -204,6 +246,8 @@ namespace Files
         protected override async void OnActivated(IActivatedEventArgs args)
         {
             Logger.Info("App activated");
+
+            await EnsureSettingsAndConfigurationAreBootstrapped();
 
             // Window management
             if (!(Window.Current.Content is Frame rootFrame))
@@ -232,6 +276,7 @@ namespace Files
                             case "tab":
                                 rootFrame.Navigate(typeof(MainPage), TabItemArguments.Deserialize(unescapedValue), new SuppressNavigationTransitionInfo());
                                 break;
+
                             case "folder":
                                 rootFrame.Navigate(typeof(MainPage), unescapedValue, new SuppressNavigationTransitionInfo());
                                 break;
@@ -292,7 +337,23 @@ namespace Files
                                     break;
 
                                 case ParsedCommandType.Unknown:
-                                    rootFrame.Navigate(typeof(MainPage), null, new SuppressNavigationTransitionInfo());
+                                    if (command.Payload.Equals("."))
+                                    {
+                                        rootFrame.Navigate(typeof(MainPage), activationPath, new SuppressNavigationTransitionInfo());
+                                    }
+                                    else
+                                    {
+                                        var target = Path.GetFullPath(Path.Combine(activationPath, command.Payload));
+                                        if (!string.IsNullOrEmpty(command.Payload))
+                                        {
+                                            rootFrame.Navigate(typeof(MainPage), target, new SuppressNavigationTransitionInfo());
+                                        }
+                                        else
+                                        {
+                                            rootFrame.Navigate(typeof(MainPage), null, new SuppressNavigationTransitionInfo());
+                                        }
+                                    }
+
                                     // Ensure the current window is active.
                                     Window.Current.Activate();
                                     Window.Current.CoreWindow.Activated += CoreWindow_Activated;
@@ -350,24 +411,27 @@ namespace Files
             var deferral = e.SuspendingOperation.GetDeferral();
             //TODO: Save application state and stop any background activity
 
-            AppSettings?.Dispose();
+            DrivesManager?.Dispose();
             deferral.Complete();
         }
 
         public static void SaveSessionTabs() // Enumerates through all tabs and gets the Path property and saves it to AppSettings.LastSessionPages
         {
-            AppSettings.LastSessionPages = MainPage.AppInstances.DefaultIfEmpty().Select(tab =>
+            if (AppSettings != null)
             {
-                if (tab != null && tab.TabItemArguments != null)
+                AppSettings.LastSessionPages = MainPageViewModel.AppInstances.DefaultIfEmpty().Select(tab =>
                 {
-                    return tab.TabItemArguments.Serialize();
-                }
-                else
-                {
-                    var defaultArg = new TabItemArguments() { InitialPageType = typeof(PaneHolderPage), NavigationArg = "NewTab".GetLocalized() };
-                    return defaultArg.Serialize();
-                }
-            }).ToArray();
+                    if (tab != null && tab.TabItemArguments != null)
+                    {
+                        return tab.TabItemArguments.Serialize();
+                    }
+                    else
+                    {
+                        var defaultArg = new TabItemArguments() { InitialPageType = typeof(PaneHolderPage), NavigationArg = "NewTab".GetLocalized() };
+                        return defaultArg.Serialize();
+                    }
+                }).ToArray();
+            }
         }
 
         // Occurs when an exception is not handled on the UI thread.
@@ -437,9 +501,27 @@ namespace Files
     public class WSLDistroItem : INavigationControlItem
     {
         public string Glyph { get; set; } = null;
+
         public string Text { get; set; }
-        public string Path { get; set; }
+
+        private string path;
+
+        public string Path
+        {
+            get => path;
+            set
+            {
+                path = value;
+                HoverDisplayText = Path.Contains("?") ? Text : Path;
+            }
+        }
+
+        public string HoverDisplayText { get; private set; }
+
         public NavigationControlItemType ItemType => NavigationControlItemType.LinuxDistro;
+
         public Uri Logo { get; set; }
+
+        public SectionType Section { get; private set; }
     }
 }

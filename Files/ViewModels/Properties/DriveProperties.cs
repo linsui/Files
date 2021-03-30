@@ -1,4 +1,5 @@
 ﻿using Files.Filesystem;
+using Microsoft.Toolkit.Uwp;
 using System;
 using System.Threading.Tasks;
 using Windows.Storage;
@@ -26,7 +27,8 @@ namespace Files.ViewModels.Properties
                 ViewModel.LoadDriveItemGlyph = true;
                 ViewModel.ItemName = Drive.Text;
                 ViewModel.OriginalItemName = Drive.Text;
-                ViewModel.ItemType = Drive.Type.ToString();
+                // Note: if DriveType enum changes, the corresponding resource keys should change too
+                ViewModel.ItemType = string.Format("DriveType{0}", Drive.Type).GetLocalized();
             }
         }
 
@@ -54,7 +56,7 @@ namespace Files.ViewModels.Properties
             catch (Exception e)
             {
                 ViewModel.LastSeparatorVisibility = Visibility.Collapsed;
-                NLog.LogManager.GetCurrentClassLogger().Error(e, e.Message);
+                NLog.LogManager.GetCurrentClassLogger().Warn(e, e.Message);
             }
         }
     }

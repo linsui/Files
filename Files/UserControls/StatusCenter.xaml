@@ -137,6 +137,7 @@
                     <Grid
                         Padding="4"
                         HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="{x:Bind FullTitle, Mode=OneWay}"
                         Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                         BorderBrush="{x:Bind StrokeColor}"
                         BorderThickness="4,0,0,0">
@@ -194,6 +195,7 @@
                                 VerticalAlignment="Top"
                                 AutomationProperties.Name="Dismiss"
                                 Background="Transparent"
+                                BorderBrush="Transparent"
                                 Click="DismissBanner"
                                 DataContext="{x:Bind}"
                                 ToolTipService.ToolTip="Dismiss">

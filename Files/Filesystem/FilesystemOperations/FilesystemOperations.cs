@@ -3,7 +3,7 @@ using Files.Enums;
 using Files.Extensions;
 using Files.Filesystem.FilesystemHistory;
 using Files.Helpers;
-using Microsoft.Toolkit.Uwp.Extensions;
+using Microsoft.Toolkit.Uwp;
 using Microsoft.Toolkit.Uwp.Helpers;
 using System;
 using System.Collections.Generic;
@@ -183,6 +183,11 @@ namespace Files.Filesystem
                                 CloseButtonText = "ItemAlreadyExistsDialogCloseButtonText".GetLocalized()
                             };
 
+                            if (UIHelpers.IsAnyContentDialogOpen())
+                            {
+                                // Only a single ContentDialog can be open at any time.
+                                return null;
+                            }
                             ContentDialogResult result = await ItemAlreadyExistsDialog.ShowAsync();
 
                             if (result == ContentDialogResult.Primary)
@@ -201,7 +206,7 @@ namespace Files.Filesystem
                         }
                         if (fsCopyResult)
                         {
-                            if (associatedInstance.FilesystemViewModel.CheckFolderForHiddenAttribute(source.Path))
+                            if (FolderHelpers.CheckFolderForHiddenAttribute(source.Path))
                             {
                                 // The source folder was hidden, apply hidden attribute to destination
                                 NativeFileOperationsHelper.SetFileAttribute(fsCopyResult.Result.Path, FileAttributes.Hidden);
@@ -219,7 +224,7 @@ namespace Files.Filesystem
             }
             else if (source.ItemType == FilesystemItemType.File)
             {
-                var fsResult = (FilesystemResult)NativeFileOperationsHelper.CopyFileFromApp(source.Path, destination, true);
+                var fsResult = (FilesystemResult)await Task.Run(() => NativeFileOperationsHelper.CopyFileFromApp(source.Path, destination, true));
 
                 if (!fsResult)
                 {
@@ -244,6 +249,11 @@ namespace Files.Filesystem
                                 CloseButtonText = "ItemAlreadyExistsDialogCloseButtonText".GetLocalized()
                             };
 
+                            if (UIHelpers.IsAnyContentDialogOpen())
+                            {
+                                // Only a single ContentDialog can be open at any time.
+                                return null;
+                            }
                             ContentDialogResult result = await ItemAlreadyExistsDialog.ShowAsync();
 
                             if (result == ContentDialogResult.Primary)
@@ -284,8 +294,8 @@ namespace Files.Filesystem
 
                     if (copiedListedItems.Count > 0)
                     {
-                        associatedInstance.ContentPage.AddSelectedItemsOnUi(copiedListedItems);
-                        associatedInstance.ContentPage.FocusSelectedItems();
+                        associatedInstance.SlimContentPage.AddSelectedItemsOnUi(copiedListedItems);
+                        associatedInstance.SlimContentPage.FocusSelectedItems();
                     }
                 }, Windows.UI.Core.CoreDispatcherPriority.Low);
             }
@@ -377,7 +387,7 @@ namespace Files.Filesystem
                 }
                 else
                 {
-                    var fsResult = (FilesystemResult)NativeFileOperationsHelper.MoveFileFromApp(source.Path, destination);
+                    var fsResult = (FilesystemResult)await Task.Run(() => NativeFileOperationsHelper.MoveFileFromApp(source.Path, destination));
 
                     if (!fsResult)
                     {
@@ -401,6 +411,11 @@ namespace Files.Filesystem
                                     CloseButtonText = "ItemAlreadyExistsDialogCloseButtonText".GetLocalized()
                                 };
 
+                                if (UIHelpers.IsAnyContentDialogOpen())
+                                {
+                                    // Only a single ContentDialog can be open at any time.
+                                    return null;
+                                }
                                 ContentDialogResult result = await ItemAlreadyExistsDialog.ShowAsync();
 
                                 if (result == ContentDialogResult.Primary)
@@ -419,7 +434,7 @@ namespace Files.Filesystem
                             }
                             if (fsResultMove)
                             {
-                                if (associatedInstance.FilesystemViewModel.CheckFolderForHiddenAttribute(source.Path))
+                                if (FolderHelpers.CheckFolderForHiddenAttribute(source.Path))
                                 {
                                     // The source folder was hidden, apply hidden attribute to destination
                                     NativeFileOperationsHelper.SetFileAttribute(fsResultMove.Result.Path, FileAttributes.Hidden);
@@ -434,7 +449,7 @@ namespace Files.Filesystem
             }
             else if (source.ItemType == FilesystemItemType.File)
             {
-                var fsResult = (FilesystemResult)NativeFileOperationsHelper.MoveFileFromApp(source.Path, destination);
+                var fsResult = (FilesystemResult)await Task.Run(() => NativeFileOperationsHelper.MoveFileFromApp(source.Path, destination));
 
                 if (!fsResult)
                 {
@@ -459,6 +474,11 @@ namespace Files.Filesystem
                                 CloseButtonText = "ItemAlreadyExistsDialogCloseButtonText".GetLocalized()
                             };
 
+                            if (UIHelpers.IsAnyContentDialogOpen())
+                            {
+                                // Only a single ContentDialog can be open at any time.
+                                return null;
+                            }
                             ContentDialogResult result = await ItemAlreadyExistsDialog.ShowAsync();
 
                             if (result == ContentDialogResult.Primary)
@@ -495,8 +515,8 @@ namespace Files.Filesystem
 
                     if (movedListedItems.Count > 0)
                     {
-                        associatedInstance.ContentPage.AddSelectedItemsOnUi(movedListedItems);
-                        associatedInstance.ContentPage.FocusSelectedItems();
+                        associatedInstance.SlimContentPage.AddSelectedItemsOnUi(movedListedItems);
+                        associatedInstance.SlimContentPage.FocusSelectedItems();
                     }
                 }, Windows.UI.Core.CoreDispatcherPriority.Low);
             }
@@ -534,33 +554,64 @@ namespace Files.Filesystem
             errorCode?.Report(fsResult);
             progress?.Report(0.0f);
 
-            if (source.ItemType == FilesystemItemType.File)
+            if (permanently)
             {
-                fsResult = await associatedInstance.FilesystemViewModel.GetFileFromPathAsync(source.Path)
-                    .OnSuccess((t) => t.DeleteAsync(permanently ? StorageDeleteOption.PermanentDelete : StorageDeleteOption.Default).AsTask());
+                fsResult = (FilesystemResult)NativeFileOperationsHelper.DeleteFileFromApp(source.Path);
             }
-            else if (source.ItemType == FilesystemItemType.Directory)
+            if (!fsResult)
             {
-                fsResult = await associatedInstance.FilesystemViewModel.GetFolderFromPathAsync(source.Path)
-                    .OnSuccess((t) => t.DeleteAsync(permanently ? StorageDeleteOption.PermanentDelete : StorageDeleteOption.Default).AsTask());
+                if (source.ItemType == FilesystemItemType.File)
+                {
+                    fsResult = await associatedInstance.FilesystemViewModel.GetFileFromPathAsync(source.Path)
+                        .OnSuccess((t) => t.DeleteAsync(permanently ? StorageDeleteOption.PermanentDelete : StorageDeleteOption.Default).AsTask());
+                }
+                else if (source.ItemType == FilesystemItemType.Directory)
+                {
+                    fsResult = await associatedInstance.FilesystemViewModel.GetFolderFromPathAsync(source.Path)
+                        .OnSuccess((t) => t.DeleteAsync(permanently ? StorageDeleteOption.PermanentDelete : StorageDeleteOption.Default).AsTask());
+                }
             }
 
             errorCode?.Report(fsResult);
 
             if (fsResult == FileSystemStatusCode.Unauthorized)
             {
-                // Try again with fulltrust process
-                if (associatedInstance.FilesystemViewModel.Connection != null)
+                // Try again with fulltrust process (non admin: for shortcuts and hidden files)
+                if (associatedInstance.ServiceConnection != null)
                 {
-                    AppServiceResponse response = await associatedInstance.FilesystemViewModel.Connection.SendMessageAsync(new ValueSet()
+                    var (status, response) = await associatedInstance.ServiceConnection.SendMessageForResponseAsync(new ValueSet()
+                    {
+                        { "Arguments", "FileOperation" },
+                        { "fileop", "DeleteItem" },
+                        { "filepath", source.Path },
+                        { "permanently", permanently }
+                    });
+                    fsResult = (FilesystemResult)(status == AppServiceResponseStatus.Success
+                        && response.Get("Success", false));
+                }
+                if (!fsResult)
+                {
+                    var elevateConfirmDialog = new Files.Dialogs.ElevateConfirmDialog();
+                    var elevateConfirmResult = await elevateConfirmDialog.ShowAsync();
+                    if (elevateConfirmResult == ContentDialogResult.Primary)
+                    {
+                        if (await associatedInstance.ServiceConnection?.Elevate()) // TODO: enable this
                         {
-                            { "Arguments", "FileOperation" },
-                            { "fileop", "DeleteItem" },
-                            { "filepath", source.Path },
-                            { "permanently", permanently }
-                        });
-                    fsResult = (FilesystemResult)(response.Status == AppServiceResponseStatus.Success
-                        && response.Message.Get("Success", false));
+                            // Try again with fulltrust process (admin)
+                            if (associatedInstance.ServiceConnection != null)
+                            {
+                                var (status, response) = await associatedInstance.ServiceConnection.SendMessageForResponseAsync(new ValueSet()
+                                {
+                                    { "Arguments", "FileOperation" },
+                                    { "fileop", "DeleteItem" },
+                                    { "filepath", source.Path },
+                                    { "permanently", permanently }
+                                });
+                                fsResult = (FilesystemResult)(status == AppServiceResponseStatus.Success
+                                    && response.Get("Success", false));
+                            }
+                        }
+                    }
                 }
             }
             else if (fsResult == FileSystemStatusCode.InUse)
@@ -703,6 +754,11 @@ namespace Files.Filesystem
                         CloseButtonText = "ItemAlreadyExistsDialogCloseButtonText".GetLocalized()
                     };
 
+                    if (UIHelpers.IsAnyContentDialogOpen())
+                    {
+                        // Only a single ContentDialog can be open at any time.
+                        return null;
+                    }
                     ContentDialogResult result = await ItemAlreadyExistsDialog.ShowAsync();
 
                     if (result == ContentDialogResult.Primary)
@@ -856,7 +912,6 @@ namespace Files.Filesystem
 
         public void Dispose()
         {
-            associatedInstance?.Dispose();
             recycleBinHelpers?.Dispose();
 
             recycleBinHelpers = null;

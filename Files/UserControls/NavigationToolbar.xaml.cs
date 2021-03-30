@@ -1,11 +1,12 @@
 ﻿using Files.DataModels;
 using Files.Filesystem;
 using Files.Helpers;
-using Files.Interacts;
+using Files.Helpers.XamlHelpers;
+using Files.UserControls.MultitaskingControl;
 using Files.ViewModels;
 using Files.Views;
-using Microsoft.Toolkit.Uwp.Extensions;
-using Microsoft.Toolkit.Uwp.UI.Extensions;
+using Microsoft.Toolkit.Uwp;
+using Microsoft.Toolkit.Uwp.UI;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -71,6 +72,204 @@ namespace Files.UserControls
         public event EventHandler UpRequested;
 
         public event EventHandler RefreshRequested;
+
+        #region Selection Options
+
+        public static readonly DependencyProperty MultiselectEnabledProperty = DependencyProperty.Register(
+          "MultiselectEnabled",
+          typeof(bool),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public bool MultiselectEnabled
+        {
+            get
+            {
+                return (bool)GetValue(MultiselectEnabledProperty);
+            }
+            set
+            {
+                SetValue(MultiselectEnabledProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty SelectAllInvokedCommandProperty = DependencyProperty.Register(
+          "SelectAllInvokedCommand",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand SelectAllInvokedCommand
+        {
+            get
+            {
+                return (ICommand)GetValue(SelectAllInvokedCommandProperty);
+            }
+            set
+            {
+                SetValue(SelectAllInvokedCommandProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty InvertSelectionInvokedCommandProperty = DependencyProperty.Register(
+          "InvertSelectionInvokedCommand",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand InvertSelectionInvokedCommand
+        {
+            get
+            {
+                return (ICommand)GetValue(InvertSelectionInvokedCommandProperty);
+            }
+            set
+            {
+                SetValue(InvertSelectionInvokedCommandProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty ClearSelectionInvokedCommandProperty = DependencyProperty.Register(
+         "ClearSelectionInvokedCommand",
+         typeof(ICommand),
+         typeof(NavigationToolbar),
+         new PropertyMetadata(null)
+       );
+
+        public ICommand ClearSelectionInvokedCommand
+        {
+            get
+            {
+                return (ICommand)GetValue(ClearSelectionInvokedCommandProperty);
+            }
+            set
+            {
+                SetValue(ClearSelectionInvokedCommandProperty, value);
+            }
+        }
+
+        #endregion Selection Options
+
+        #region Layout Options
+
+        public static readonly DependencyProperty LayoutModeInformationProperty = DependencyProperty.Register(
+          "LayoutModeInformation",
+          typeof(FolderLayoutInformation),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public FolderLayoutInformation LayoutModeInformation
+        {
+            get
+            {
+                return (FolderLayoutInformation)GetValue(LayoutModeInformationProperty);
+            }
+            set
+            {
+                SetValue(LayoutModeInformationProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty ToggleLayoutModeDetailsViewProperty = DependencyProperty.Register(
+          "ToggleLayoutModeDetailsView",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand ToggleLayoutModeDetailsView
+        {
+            get
+            {
+                return (ICommand)GetValue(ToggleLayoutModeDetailsViewProperty);
+            }
+            set
+            {
+                SetValue(ToggleLayoutModeDetailsViewProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty ToggleLayoutModeTilesProperty = DependencyProperty.Register(
+          "ToggleLayoutModeTiles",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand ToggleLayoutModeTiles
+        {
+            get
+            {
+                return (ICommand)GetValue(ToggleLayoutModeTilesProperty);
+            }
+            set
+            {
+                SetValue(ToggleLayoutModeTilesProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty ToggleLayoutModeGridViewSmallProperty = DependencyProperty.Register(
+          "ToggleLayoutModeGridViewSmall",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand ToggleLayoutModeGridViewSmall
+        {
+            get
+            {
+                return (ICommand)GetValue(ToggleLayoutModeGridViewSmallProperty);
+            }
+            set
+            {
+                SetValue(ToggleLayoutModeGridViewSmallProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty ToggleLayoutModeGridViewMediumProperty = DependencyProperty.Register(
+          "ToggleLayoutModeGridViewMedium",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand ToggleLayoutModeGridViewMedium
+        {
+            get
+            {
+                return (ICommand)GetValue(ToggleLayoutModeGridViewMediumProperty);
+            }
+            set
+            {
+                SetValue(ToggleLayoutModeGridViewMediumProperty, value);
+            }
+        }
+
+        public static readonly DependencyProperty ToggleLayoutModeGridViewLargeProperty = DependencyProperty.Register(
+          "ToggleLayoutModeGridViewLarge",
+          typeof(ICommand),
+          typeof(NavigationToolbar),
+          new PropertyMetadata(null)
+        );
+
+        public ICommand ToggleLayoutModeGridViewLarge
+        {
+            get
+            {
+                return (ICommand)GetValue(ToggleLayoutModeGridViewLargeProperty);
+            }
+            set
+            {
+                SetValue(ToggleLayoutModeGridViewLargeProperty, value);
+            }
+        }
+
+        #endregion Layout Options
 
         public static readonly DependencyProperty IsPageTypeNotHomeProperty = DependencyProperty.Register(
           "IsPageTypeNotHome",
@@ -338,14 +537,31 @@ namespace Files.UserControls
             }
         }
 
+        public static readonly DependencyProperty PreviewPaneEnabledProperty = DependencyProperty.Register(
+            "PreviewPaneEnabled",
+            typeof(bool),
+            typeof(NavigationToolbar),
+            new PropertyMetadata(null)
+        );
+
+        public bool PreviewPaneEnabled
+        {
+            get => (bool)GetValue(PreviewPaneEnabledProperty);
+            set => SetValue(PreviewPaneEnabledProperty, value);
+        }
+
         public SettingsViewModel AppSettings => App.AppSettings;
 
         private List<ShellNewEntry> cachedNewContextMenuEntries { get; set; }
+
+        private DispatcherQueueTimer dragOverTimer;
 
         public NavigationToolbar()
         {
             this.InitializeComponent();
             this.Loading += NavigationToolbar_Loading;
+
+            dragOverTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         }
 
         private async void NavigationToolbar_Loading(FrameworkElement sender, object args)
@@ -497,7 +713,7 @@ namespace Files.UserControls
                 {
                     EditModeEnabled?.Invoke(this, new EventArgs());
                     VisiblePath.Focus(FocusState.Programmatic);
-                    Interaction.FindChild<TextBox>(VisiblePath)?.SelectAll();
+                    DependencyObjectHelpers.FindChild<TextBox>(VisiblePath)?.SelectAll();
                 }
                 else
                 {
@@ -513,7 +729,7 @@ namespace Files.UserControls
         {
             // AutoSuggestBox won't receive focus unless it's fully loaded
             VisiblePath.Focus(FocusState.Programmatic);
-            Interaction.FindChild<TextBox>(VisiblePath)?.SelectAll();
+            DependencyObjectHelpers.FindChild<TextBox>(VisiblePath)?.SelectAll();
         }
 
         public bool CanRefresh
@@ -609,8 +825,11 @@ namespace Files.UserControls
 
             var element = FocusManager.GetFocusedElement();
             var elementAsControl = element as Control;
-
-            if (elementAsControl.FocusState != FocusState.Programmatic && elementAsControl.FocusState != FocusState.Keyboard)
+            if (elementAsControl == null)
+            {
+                return;
+            }
+            else if (elementAsControl.FocusState != FocusState.Programmatic && elementAsControl.FocusState != FocusState.Keyboard)
             {
                 (this as INavigationToolbar).IsEditModeEnabled = false;
             }
@@ -632,7 +851,10 @@ namespace Files.UserControls
                 await Task.Delay(1000);
                 if (!cancelFlyoutOpen)
                 {
-                    (sender as Button).Flyout.ShowAt(sender as Button);
+                    if (sender != null)
+                    {
+                        (sender as Button).Flyout.ShowAt(sender as Button);
+                    }
                     cancelFlyoutOpen = false;
                 }
                 else
@@ -664,12 +886,18 @@ namespace Files.UserControls
 
         private void Flyout_Opened(object sender, object e)
         {
-            VisualStateManager.GoToState(VerticalTabStripInvokeButton, "PointerOver", false);
+            if (VerticalTabStripInvokeButton != null)
+            {
+                VisualStateManager.GoToState(VerticalTabStripInvokeButton, "PointerOver", false);
+            }
         }
 
         private void Flyout_Closed(object sender, object e)
         {
-            VisualStateManager.GoToState(VerticalTabStripInvokeButton, "Normal", false);
+            if (VerticalTabStripInvokeButton != null)
+            {
+                VisualStateManager.GoToState(VerticalTabStripInvokeButton, "Normal", false);
+            }
         }
 
         private void VerticalTabStripInvokeButton_DragEnter(object sender, DragEventArgs e)
@@ -688,10 +916,13 @@ namespace Files.UserControls
                 cancelFlyoutAutoClose = false;
                 VerticalTabs.PointerEntered += VerticalTabs_PointerEntered;
                 await Task.Delay(1000);
-                VerticalTabs.PointerEntered -= VerticalTabs_PointerEntered;
+                if (VerticalTabs != null)
+                {
+                    VerticalTabs.PointerEntered -= VerticalTabs_PointerEntered;
+                }
                 if (!cancelFlyoutAutoClose)
                 {
-                    VerticalTabViewFlyout.Hide();
+                    VerticalTabViewFlyout?.Hide();
                 }
                 cancelFlyoutAutoClose = false;
             }
@@ -707,7 +938,6 @@ namespace Files.UserControls
         }
 
         private string dragOverPath = null;
-        private DispatcherTimer dragOverTimer = new DispatcherTimer();
 
         private void PathBoxItem_DragLeave(object sender, DragEventArgs e)
         {
@@ -773,6 +1003,13 @@ namespace Files.UserControls
                 deferral.Complete();
                 return;
             }
+            catch (Exception ex)
+            {
+                NLog.LogManager.GetCurrentClassLogger().Warn(ex, ex.Message);
+                e.AcceptedOperation = DataPackageOperation.None;
+                deferral.Complete();
+                return;
+            }
 
             if (!storageItems.Any(storageItem =>
             storageItem.Path.Replace(pathBoxItem.Path, string.Empty).
@@ -793,6 +1030,8 @@ namespace Files.UserControls
 
         private void PathBoxItem_Drop(object sender, DragEventArgs e)
         {
+            dragOverPath = null; // Reset dragged over pathbox item
+
             if (!((sender as Grid).DataContext is PathBoxItem pathBoxItem) ||
                 pathBoxItem.Path == "Home" || pathBoxItem.Path == "NewTab".GetLocalized())
             {
@@ -836,15 +1075,23 @@ namespace Files.UserControls
         private void PathItemSeparator_Loaded(object sender, RoutedEventArgs e)
         {
             var pathSeparatorIcon = sender as FontIcon;
+            pathSeparatorIcon.Tapped += (s, e) => pathSeparatorIcon.ContextFlyout.ShowAt(pathSeparatorIcon);
+            pathSeparatorIcon.ContextFlyout.Opened += (s, e) => { pathSeparatorIcon.Glyph = "\uE70D"; };
+            pathSeparatorIcon.ContextFlyout.Closed += (s, e) => { pathSeparatorIcon.Glyph = "\uE76C"; };
+        }
+
+        private void PathItemSeparator_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            var pathSeparatorIcon = sender as FontIcon;
+            if (pathSeparatorIcon.DataContext == null)
+            {
+                return;
+            }
             ToolbarPathItemLoaded?.Invoke(pathSeparatorIcon, new ToolbarPathItemLoadedEventArgs()
             {
                 Item = pathSeparatorIcon.DataContext as PathBoxItem,
                 OpenedFlyout = pathSeparatorIcon.ContextFlyout as MenuFlyout
             });
-
-            pathSeparatorIcon.Tapped += (s, e) => pathSeparatorIcon.ContextFlyout.ShowAt(pathSeparatorIcon);
-            pathSeparatorIcon.ContextFlyout.Opened += (s, e) => { pathSeparatorIcon.Glyph = "\uE9A5"; };
-            pathSeparatorIcon.ContextFlyout.Closed += (s, e) => { pathSeparatorIcon.Glyph = "\uE9A8"; };
         }
 
         private void PathboxItemFlyout_Opened(object sender, object e)
@@ -854,7 +1101,10 @@ namespace Files.UserControls
 
         private void VerticalTabStripInvokeButton_Loaded(object sender, RoutedEventArgs e)
         {
-            MainPage.MultitaskingControl = VerticalTabs;
+            if (!(MainPageViewModel.MultitaskingControl is VerticalTabViewControl))
+            {
+                MainPageViewModel.MultitaskingControl = VerticalTabs;
+            }
         }
 
         private void Back_Click(object sender, RoutedEventArgs e)
@@ -960,8 +1210,7 @@ namespace Files.UserControls
                             Text = newEntry.Name,
                             Icon = new FontIcon()
                             {
-                                FontFamily = App.Current.Resources["FluentUIGlyphs"] as Windows.UI.Xaml.Media.FontFamily,
-                                Glyph = "\xea00"
+                                Glyph = "\xE7C3"
                             },
                             Tag = "CreateNewFile"
                         };
@@ -971,6 +1220,11 @@ namespace Files.UserControls
                     newItemMenu.Items.Insert(separatorIndex + 1, menuLayoutItem);
                 }
             }
+        }
+
+        private void PreviewPane_Click(object sender, RoutedEventArgs e)
+        {
+            PreviewPaneEnabled = !PreviewPaneEnabled;
         }
     }
 }
